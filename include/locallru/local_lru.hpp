@@ -1,4 +1,5 @@
 #pragma once
+#include <cstdint>
 #include <unordered_map>
 #include <list>
 #include <chrono>
@@ -53,4 +54,47 @@ namespace locallru {
     // For timing
     using Clock = std::chrono::steady_clock;
     using Seconds = std::chrono::seconds;
+    
+    // A single-thread store implementing LRU with TTL.
+    // Not thread-safe across threads (by design) but safe for single-thread use.
+    // Managed behind thread_local in LocalCache<T>.
+    
+    template<typename K, typename V>
+    class LruStore{
+      public:
+        using key_type = K;
+        using value_type = V;
+        using time_point = Clock::time_point;
+        
+        explicit LruStore(std::size_t capacity, std::uint64_t ttl_seconds) 
+            : capacity_(capacity), ttl_seconds_(ttl_seconds) {}
+        
+        std::size_t capacity() const noexcept { return capacity_;}
+        std::uint64_t ttl_seconds() const noexcept { return ttl_seconds_ ; }
+        std::size_t size() const noexcept { return map_.size(); }
+        
+        
+      private:
+        struct Node {
+            value_type value;
+            time_point expiry;
+            typename std::list<key_type>::iterator lru_it;
+        };
+        
+        using Map = std::unordered_map<key_type, Node>;
+        
+        bool is_expired(const Node& n, time_point now) const {
+            if(ttl_seconds_ == 0) return false;
+            return now > n.expiry;
+        }
+        
+        time_point expiry_from(time_point now) const {
+            if (ttl_seconds_ == 0) return time_point::max();
+            return now + Seconds(static_cast<long long>(ttl_seconds_));
+        }
+      
+        std::size_t capacity_ = 0;
+        std::uint64_t ttl_seconds_ = 0;
+        Map map_;
+    };
 }
