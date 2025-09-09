@@ -4,11 +4,7 @@
 #include <list>
 #include <chrono>
 #include <optional>
-#include <string>
-#include <atomic>
-#include <memory>
 #include <utility>
-#include <type_traits>
 
 // -----------------------------------------------------------------------------
 // local_lru.hpp
