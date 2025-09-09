@@ -73,6 +73,58 @@ namespace locallru {
         std::uint64_t ttl_seconds() const noexcept { return ttl_seconds_ ; }
         std::size_t size() const noexcept { return map_.size(); }
         
+        void clear(){
+            map_.clear();
+            lru_.clear();
+        }
+        
+        bool contains_expired(const key_type &key, time_point now) const {
+            auto it = map_.find(key);
+            if(it==map_.end()) return false;
+            return is_expired(it->second, now);
+        }
+        
+        std::optional<value_type> get(const key_type &key){
+            const auto now = Clock::now();
+            auto it = map_.find(key);
+            if(it == map_.end()) return std::nullopt;
+            if (is_expired(it->second, now)) {
+                erase_it(it);
+                return std::nullopt;
+            }
+            touch(it);
+            return it->second.value;
+        }
+        
+        void put(const key_type& key, value_type value){
+            const auto now = Clock::now();
+            if(capacity_ == 0) return; // No capacity to store
+            
+            auto it = map_.find(key);
+            if(it != map_.end()){
+                it->second.value = value;
+                it->second.expiry = expiry_from(now);
+                touch(it);
+                return;
+            }
+            
+            // Ensure space
+            while(map_.size() >= capacity_) {
+                evict_one();
+            }
+            
+            lru_.push_front(key);
+            Node node{std::move(value), expiry_from(now), lru_.begin()};
+            map_.emplace(key, std::move(node));
+        }
+        
+        bool erase(const key_type &key){
+            auto it = map_.find(key);
+            if(it == map_.end()) return false;
+            erase_it(it);
+            return true;
+        }
+        
         
       private:
         struct Node {
@@ -92,9 +144,34 @@ namespace locallru {
             if (ttl_seconds_ == 0) return time_point::max();
             return now + Seconds(static_cast<long long>(ttl_seconds_));
         }
+        
+        void touch(typename Map::iterator it){
+            // Move key to front (Most recently used)
+            lru_.splice(lru_.begin(), lru_, it->second.lru_it);
+            it->second.lru_it = lru_.begin();
+        }
+        
+        void evict_one() {
+            if(lru_.empty()) return;
+            auto last_it = std::prev(lru_.end()); // lru_.end() is a sentinel iterator (points past the last element)
+            auto key = *last_it;
+            auto it = map_.find(key);
+            if (it != map_.end()) {
+                lru_.erase(it->second.lru_it);
+                map_.erase(it);
+            } else {
+                // Should not happen; Keep structure consistent
+                lru_.erase(last_it);
+            }
+        }
+        
+        void erase_it(typename Map::iterator it) {
+            lru_.erase(it->second.lru_it);
+            map_.erase(it);
+        }
       
         std::size_t capacity_ = 0;
-        std::uint64_t ttl_seconds_ = 0;
+        std::uint64_t ttl_seconds_ = 0; // 0 => No expiry
+        std::list<key_type> lru_; // front = most-recent, back = least-recent
         Map map_;
     };
-}
