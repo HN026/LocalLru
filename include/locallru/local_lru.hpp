@@ -5,6 +5,9 @@
 #include <chrono>
 #include <optional>
 #include <utility>
+#include <string>
+#include <atomic>
+#include <memory>
 
 // -----------------------------------------------------------------------------
 // local_lru.hpp
@@ -171,3 +174,71 @@ namespace locallru {
         std::list<key_type> lru_; // front = most-recent, back = least-recent
         Map map_;
     };
+    
+    // High-level API similar to the Rust crate: LocalCache<T>.
+    // - Thread-local store per type T per thread.
+    // - initialize(capacity, ttl) sets *global* defaults for yet-to-be-created
+    //   thread-local stores and returns a lightweight handle.
+    
+    template<typename T>
+    class LocalCache {
+        public:
+            using key_type = std::string;
+            using value_type = T;
+            
+            // Set global defaults for future thread-local stores of this T.
+            // Returns a lightweight handle (stateless) for calling add/get.
+            static LocalCache initialize(std::size_t capacity, std::uint64_t ttl_seconds){
+                g_capacity.store(capacity, std::memory_order_relaxed);
+                g_ttl_seconds.store(ttl_seconds, std::memory_order_relaxed);
+                return LocalCache{};
+            }
+            
+            // Add or update an Item in the current thread's cache
+            void add_item(const key_type&key, const value_type value){
+                store().put(key, std::move(value));
+            }
+            
+            // Get an Item (if present and not expired)
+            std::optional<value_type> get_item(const key_type& key){
+                return store().get(key);
+            }
+            
+            // Remove an Item; returns true if removed
+            bool remove_item(const key_type& key){
+                return store().erase(key);
+            }
+            
+            
+            // Introspection (current thread only)
+            std::size_t size() const {
+                return store().size();
+            }
+            
+            std::size_t capacity() const {
+                return store().capacity();
+            }
+            
+            std::uint64_t ttl_seconds() const {
+                return store().ttl_seconds();
+            }
+            
+            void clear() {
+                store().clear();
+            }
+            
+        private:
+            using Store = LruStore<key_type, value_type>;
+            
+            static Store& store(){
+                if(!ttl_store_){
+                    ttl_store_ = std::make_unique<Store>(g_capacity.load(std::memory_order_relaxed), g_ttl_seconds.load(std::memory_order_relaxed));
+                }
+                return *ttl_store_;
+            }
+        
+            static std::atomic<std::size_t> g_capacity;
+            static std::atomic<std::uint64_t> g_ttl_seconds;
+            static thread_local std::unique_ptr<Store> ttl_store_;
+    };      
+}
