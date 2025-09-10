@@ -241,4 +241,14 @@ namespace locallru {
             static std::atomic<std::uint64_t> g_ttl_seconds;
             static thread_local std::unique_ptr<Store> ttl_store_;
     };      
+    
+    // Static Definitions
+    template <typename T>
+    std::atomic<std::size_t> LocalCache<T>::g_capacity{0};
+
+    template <typename T>
+    std::atomic<std::uint64_t> LocalCache<T>::g_ttl_seconds{0};
+    
+    template <typename T>
+    thread_local std::unique_ptr<typename LocalCache<T>::Store> LocalCache<T>::ttl_store_{};
 }
