@@ -1,1 +1,0 @@
-/usr/bin/c++ -Wl,--dependency-file=CMakeFiles/trading_demo.dir/link.d CMakeFiles/trading_demo.dir/examples/trading_demo.cpp.o -o trading_demo  /usr/lib64/libcurl.so

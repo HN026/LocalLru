@@ -1,3 +1,0 @@
-/home/huzaifa/LocalLRU/build/CMakeFiles/trading_demo.dir
-/home/huzaifa/LocalLRU/build/CMakeFiles/edit_cache.dir
-/home/huzaifa/LocalLRU/build/CMakeFiles/rebuild_cache.dir
